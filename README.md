@@ -1,5 +1,10 @@
 # 🎥 MatrixRTC Authorization Service
 
+> [!NOTE]
+> This MindRoom-maintained fork tracks
+> [element-hq/lk-jwt-service](https://github.com/element-hq/lk-jwt-service)
+> and publishes its container images to `ghcr.io/mindroom-ai/lk-jwt-service`.
+
 The **MatrixRTC Authorization Service** bridges Matrix and LiveKit, handling
 authentication and room creation when needed.
 
@@ -94,7 +99,7 @@ Releases are available
 ### 🐳 From Docker Image
 
 ```shell
-docker run -e LIVEKIT_URL="ws://somewhere" -e LIVEKIT_KEY=devkey -e LIVEKIT_SECRET=secret -e LIVEKIT_FULL_ACCESS_HOMESERVERS=example.com -p 8080:8080 ghcr.io/element-hq/lk-jwt-service:latest
+docker run -e LIVEKIT_URL="ws://somewhere" -e LIVEKIT_KEY=devkey -e LIVEKIT_SECRET=secret -e LIVEKIT_FULL_ACCESS_HOMESERVERS=example.com -p 8080:8080 ghcr.io/mindroom-ai/lk-jwt-service:latest
 ```
 
 ### 📦 From Release

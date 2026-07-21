@@ -2,6 +2,7 @@ name: Trigger Build and publish Docker image
 
 on:
   push:
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
@@ -10,15 +11,13 @@ env:
 jobs:
   build-docker:
     permissions:
-      contents: write
+      contents: read
       packages: write
-      id-token: write
     uses: ./.github/workflows/build-and-publish-docker.yaml
     secrets: inherit
     with:
       docker_tags: |
-        type=sha,format=short,event=branch
-        type=ref,event=pr
+        type=sha,format=long
+        type=ref,event=branch
         type=semver,pattern={{version}}
-        type=raw,value=latest-ci_{{date 'X'}},enable={{is_default_branch}}
-        latest-ci
+        type=raw,value=latest,enable={{is_default_branch}}
