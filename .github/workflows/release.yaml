@@ -52,10 +52,10 @@ jobs:
           body: |
             ## Docker image
 
-            The service is available as a Docker image from the [GitHub Container Registry](https://github.com/element-hq/lk-jwt-service/pkgs/container/lk-jwt-service).
+            The service is available as a Docker image from the [GitHub Container Registry](https://github.com/mindroom-ai/lk-jwt-service/pkgs/container/lk-jwt-service).
 
             ```
-            docker pull ghcr.io/element-hq/lk-jwt-service:${{env.IMAGE_VERSION}}
+            docker pull ghcr.io/mindroom-ai/lk-jwt-service:${{env.IMAGE_VERSION}}
             ```
 
             ## Precompiled binaries
