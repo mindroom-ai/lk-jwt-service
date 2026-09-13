@@ -1,5 +1,10 @@
 # 🎥 MatrixRTC Authorization Service
 
+<picture>
+  <source media="(prefers-reduced-motion: no-preference)" srcset="https://raw.githubusercontent.com/mindroom-ai/mindroom/main/assets/logo/logo-mark-animated.svg" />
+  <img src="https://raw.githubusercontent.com/mindroom-ai/mindroom/main/assets/logo/logo-mark.svg" alt="MindRoom Logo" align="right" width="120" />
+</picture>
+
 > [!NOTE]
 > This MindRoom-maintained fork tracks
 > [element-hq/lk-jwt-service](https://github.com/element-hq/lk-jwt-service)
