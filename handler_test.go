@@ -87,10 +87,11 @@ func TestIsFullAccessUser(t *testing.T) {
 	}
 }
 
-// TestRequireRoomMembership verifies that with requireRoomMembership both
-// grant endpoints pass the requested room to the homeserver's userinfo
-// endpoint and grant only when the homeserver confirms the membership, and
-// that users of homeservers not listed by name are refused without a lookup.
+// TestRequireRoomMembership verifies that with requireRoomMembership every
+// endpoint that verifies an OpenID token passes the requested room to the
+// homeserver's userinfo endpoint and accepts the user only when the
+// homeserver confirms the membership, and that users of homeservers not listed
+// by name are refused without a lookup.
 func TestRequireRoomMembership(t *testing.T) {
 	const roomID = "!room:example.com"
 	var lookups atomic.Int32
@@ -121,6 +122,12 @@ func TestRequireRoomMembership(t *testing.T) {
 	CreateLiveKitRoom = func(context.Context, *LiveKitAuth, LiveKitRoomAlias, string, LiveKitIdentity) error {
 		return nil
 	}
+	originalLookup := LiveKitParticipantExists
+	t.Cleanup(func() { LiveKitParticipantExists = originalLookup })
+	LiveKitParticipantExists = func(ctx context.Context, _ LiveKitAuth, _ LiveKitRoomAlias, _ LiveKitIdentity) (bool, error) {
+		<-ctx.Done()
+		return false, ctx.Err()
+	}
 
 	requests := map[string]func(token OpenIDTokenType) any{
 		"/get_token": func(token OpenIDTokenType) any {
@@ -132,6 +139,13 @@ func TestRequireRoomMembership(t *testing.T) {
 		},
 		"/sfu/get": func(token OpenIDTokenType) any {
 			return LegacySFURequest{Room: roomID, OpenIDToken: token, DeviceID: "DEVICE"}
+		},
+		"/delegate_delayed_leave": func(token OpenIDTokenType) any {
+			req := validDelegateDelayedLeaveRequest()
+			req.RoomID = roomID
+			req.OpenIDToken = token
+			req.Member.ClaimedUserID = "@alice:" + serverName
+			return req
 		},
 	}
 
@@ -155,7 +169,7 @@ func TestRequireRoomMembership(t *testing.T) {
 					true, // skipVerifyTLS for the httptest homeserver
 					[]string{tc.fullAccess},
 					0, // sanityCheckInterval disabled
-					map[string]CsApiUrl{},
+					map[string]CsApiUrl{serverName: "https://matrix.example.com"},
 					nil,
 				)
 				t.Cleanup(handler.Close)
