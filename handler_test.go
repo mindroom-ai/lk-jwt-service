@@ -96,8 +96,9 @@ func TestRequireRoomMembership(t *testing.T) {
 	var lookups atomic.Int32
 	homeserver := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		lookups.Add(1)
-		if got := r.URL.Query().Get("io.mindroom.room_id"); got != roomID {
-			t.Errorf("io.mindroom.room_id = %q, want %q", got, roomID)
+		if r.URL.Query().Get("io.mindroom.room_id") != roomID {
+			w.WriteHeader(http.StatusBadRequest)
+			return
 		}
 		switch r.URL.Query().Get("access_token") {
 		case "joined":
