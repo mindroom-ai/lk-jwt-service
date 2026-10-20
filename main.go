@@ -74,6 +74,7 @@ func main() {
 		config.CsApiUrlOverrides,
 		store,
 	)
+	handler.requireRoomMembership = config.RequireRoomMembership
 
 	sanityCheckIntervalDisplay := "disabled"
 	if config.SanityCheckInterval > 0 {
@@ -85,6 +86,7 @@ func main() {
 		"LIVEKIT_FULL_ACCESS_HOMESERVERS", config.FullAccessHomeservers,
 		"SkipVerifyTLS", config.SkipVerifyTLS,
 		"SanityCheckInterval", sanityCheckIntervalDisplay,
+		"RequireRoomMembership", config.RequireRoomMembership,
 	)
 
 	log.Fatal(http.ListenAndServe(config.LkJwtBind, handler.prepareMux()))

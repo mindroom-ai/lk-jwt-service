@@ -20,9 +20,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -81,6 +84,97 @@ func TestIsFullAccessUser(t *testing.T) {
 	handler.fullAccessHomeservers = []string{"*"}
 	if !handler.isFullAccessUser("other.com") {
 		t.Error("expected wildcard to grant full access")
+	}
+}
+
+// TestRequireRoomMembership verifies that with requireRoomMembership both
+// grant endpoints pass the requested room to the homeserver's userinfo
+// endpoint and grant only when the homeserver confirms the membership, and
+// that users of homeservers not listed by name are refused without a lookup.
+func TestRequireRoomMembership(t *testing.T) {
+	const roomID = "!room:example.com"
+	var lookups atomic.Int32
+	homeserver := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		lookups.Add(1)
+		if got := r.URL.Query().Get("io.mindroom.room_id"); got != roomID {
+			t.Errorf("io.mindroom.room_id = %q, want %q", got, roomID)
+		}
+		switch r.URL.Query().Get("access_token") {
+		case "joined":
+			_, _ = fmt.Fprintf(w, `{"sub": "@alice:%s", "io.mindroom.room_joined": true}`, r.Host)
+		case "ignored":
+			_, _ = fmt.Fprintf(w, `{"sub": "@alice:%s"}`, r.Host)
+		case "other-server":
+			_, _ = fmt.Fprint(w, `{"sub": "@alice:other.example.com", "io.mindroom.room_joined": true}`)
+		default:
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = fmt.Fprint(w, `{"errcode": "M_FORBIDDEN", "error": "not joined"}`)
+		}
+	}))
+	t.Cleanup(homeserver.Close)
+	homeserverURL, _ := url.Parse(homeserver.URL)
+	serverName := homeserverURL.Host
+
+	originalCreate := CreateLiveKitRoom
+	t.Cleanup(func() { CreateLiveKitRoom = originalCreate })
+	CreateLiveKitRoom = func(context.Context, *LiveKitAuth, LiveKitRoomAlias, string, LiveKitIdentity) error {
+		return nil
+	}
+
+	requests := map[string]func(token OpenIDTokenType) any{
+		"/get_token": func(token OpenIDTokenType) any {
+			req := validSFURequest()
+			req.RoomID = roomID
+			req.OpenIDToken = token
+			req.Member.ClaimedUserID = "@alice:" + serverName
+			return req
+		},
+		"/sfu/get": func(token OpenIDTokenType) any {
+			return LegacySFURequest{Room: roomID, OpenIDToken: token, DeviceID: "DEVICE"}
+		},
+	}
+
+	for _, tc := range []struct {
+		name        string
+		accessToken string
+		fullAccess  string
+		wantStatus  int
+		wantLookups int32
+	}{
+		{"joined", "joined", serverName, http.StatusOK, 1},
+		{"homeserver ignores the room", "ignored", serverName, http.StatusUnauthorized, 1},
+		{"not joined", "not-joined", serverName, http.StatusUnauthorized, 1},
+		{"user of another homeserver", "other-server", serverName, http.StatusUnauthorized, 1},
+		{"homeserver not listed by name", "joined", "*", http.StatusUnauthorized, 0},
+	} {
+		for endpoint, request := range requests {
+			t.Run(tc.name+" "+endpoint, func(t *testing.T) {
+				handler := NewHandler(
+					LiveKitAuth{key: "key", secret: "secret", lkUrl: "wss://lk.local"},
+					true, // skipVerifyTLS for the httptest homeserver
+					[]string{tc.fullAccess},
+					0, // sanityCheckInterval disabled
+					map[string]CsApiUrl{},
+					nil,
+				)
+				t.Cleanup(handler.Close)
+				handler.requireRoomMembership = true
+				lookups.Store(0)
+
+				body, err := json.Marshal(request(OpenIDTokenType{AccessToken: tc.accessToken, MatrixServerName: serverName}))
+				if err != nil {
+					t.Fatalf("failed to marshal request: %v", err)
+				}
+				rr := httptest.NewRecorder()
+				handler.prepareMux().ServeHTTP(rr, httptest.NewRequest("POST", endpoint, bytes.NewReader(body)))
+				if rr.Code != tc.wantStatus {
+					t.Errorf("status = %d, want %d: %s", rr.Code, tc.wantStatus, rr.Body)
+				}
+				if got := lookups.Load(); got != tc.wantLookups {
+					t.Errorf("userinfo lookups = %d, want %d", got, tc.wantLookups)
+				}
+			})
+		}
 	}
 }
 

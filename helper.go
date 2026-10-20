@@ -27,6 +27,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -156,6 +157,49 @@ var exchangeOpenIdUserInfo = func(
 		return nil, fmt.Errorf("failed to look up user info: %w", err)
 	}
 	return &userinfo, nil
+}
+
+// exchangeOpenIdUserInfoInRoom is exchangeOpenIdUserInfo for
+// LIVEKIT_REQUIRE_ROOM_MEMBERSHIP. It also sends `io.mindroom.room_id`, which
+// MindRoom's Tuwunel answers only for a user joined to that room, and requires
+// the `"io.mindroom.room_joined": true` confirmation, so a homeserver that
+// ignores the parameter is refused.
+var exchangeOpenIdUserInfoInRoom = func(
+	ctx context.Context, token OpenIDTokenType, roomID string, skipVerifyTLS bool,
+) (*fclient.UserInfo, error) {
+	client := fclient.NewClient(fclient.WithWellKnownSRVLookups(true), fclient.WithSkipVerify(skipVerifyTLS))
+
+	userinfoURL := url.URL{
+		Scheme: "matrix",
+		Host:   token.MatrixServerName,
+		Path:   "/_matrix/federation/v1/openid/userinfo",
+		RawQuery: url.Values{
+			"access_token":        {token.AccessToken},
+			"io.mindroom.room_id": {roomID},
+		}.Encode(),
+	}
+	req, err := http.NewRequest(http.MethodGet, userinfoURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var userInfo struct {
+		Sub        string `json:"sub"`
+		RoomJoined bool   `json:"io.mindroom.room_joined"`
+	}
+	if err = client.DoRequestAndParseResponse(ctx, req, &userInfo); err != nil {
+		slog.Warn("OpenIDUserInfo: Failed to look up user info in room", "room", roomID, "err", err)
+		return nil, fmt.Errorf("failed to look up user info: %w", err)
+	}
+	if !userInfo.RoomJoined {
+		slog.Warn("OpenIDUserInfo: Homeserver did not confirm room membership",
+			"room", roomID, "MatrixServerName", token.MatrixServerName)
+		return nil, errors.New("homeserver did not confirm room membership")
+	}
+	if _, server, _ := strings.Cut(userInfo.Sub, ":"); server != token.MatrixServerName {
+		return nil, fmt.Errorf("user ID %q does not belong to %q", userInfo.Sub, token.MatrixServerName)
+	}
+	return &fclient.UserInfo{Sub: userInfo.Sub}, nil
 }
 
 var unpaddedBase64 = base64.StdEncoding.WithPadding(base64.NoPadding)
