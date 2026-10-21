@@ -39,6 +39,10 @@ type Config struct {
 	CsApiUrlOverrides map[string]CsApiUrl
 	// Connection URL for the Redis store.
 	RedisURL string
+	// RequireRoomMembership issues tokens only to users of the listed
+	// full-access homeservers who are joined to the requested room.
+	// Configure via LIVEKIT_REQUIRE_ROOM_MEMBERSHIP.
+	RequireRoomMembership bool
 }
 
 func readKeySecret() (string, string) {
@@ -155,6 +159,14 @@ func parseConfig() (*Config, error) {
 		return nil, fmt.Errorf("failed parsing LIVEKIT_CS_API_URL_OVERRIDES: %w", err)
 	}
 
+	var requireRoomMembership bool
+	if s := os.Getenv("LIVEKIT_REQUIRE_ROOM_MEMBERSHIP"); s != "" {
+		requireRoomMembership, err = strconv.ParseBool(s)
+		if err != nil {
+			return nil, fmt.Errorf("LIVEKIT_REQUIRE_ROOM_MEMBERSHIP must be true or false, got %q", s)
+		}
+	}
+
 	return &Config{
 		Key:                   key,
 		Secret:                secret,
@@ -165,5 +177,6 @@ func parseConfig() (*Config, error) {
 		SanityCheckInterval:   sanityCheckInterval,
 		CsApiUrlOverrides:     csApiUrlOverrides,
 		RedisURL:              os.Getenv("LIVEKIT_REDIS_URL"),
+		RequireRoomMembership: requireRoomMembership,
 	}, nil
 }

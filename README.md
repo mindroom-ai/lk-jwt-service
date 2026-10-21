@@ -139,6 +139,7 @@ Set environment variables to configure the service:
 | `LIVEKIT_LOG_LEVEL`                           | One of `debug`, `info`, `warn`/`warning`, `error`             | ❌ No                                                | `info` |
 | `LIVEKIT_CS_API_URL_OVERRIDES`                | Comma-separated list of overrides for Client-Server API locations that cannot be inferred using .well-known discovery (e.g. `example.com=matrix-client.example.com`) | ❌ No                                                | |
 | `LIVEKIT_REDIS_URL`                           | Redis connection URL (e.g. `redis://localhost:6379`). When set, service state will be persisted during operation and restored upon service restarts. When unset, the service falls back to an in-memory store. | ❌ No | |
+| `LIVEKIT_REQUIRE_ROOM_MEMBERSHIP`             | `true` issues tokens only to users who are joined to the requested Matrix room, as confirmed by their homeserver, and refuses users of homeservers not listed by name in `LIVEKIT_FULL_ACCESS_HOMESERVERS` (`*` does not count). Every listed homeserver must answer the `io.mindroom.room_id` parameter of the OpenID userinfo endpoint (MindRoom's Tuwunel does); otherwise all its users are refused. | ❌ No | `false` |
 
 > [!WARNING]
 > **Restricting room creation** requires two pieces working together:

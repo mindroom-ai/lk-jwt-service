@@ -29,6 +29,7 @@ import (
 	"github.com/livekit/protocol/webhook"
 
 	"github.com/matrix-org/gomatrix"
+	"github.com/matrix-org/gomatrixserverlib/fclient"
 )
 
 type LiveKitAuth struct {
@@ -117,6 +118,9 @@ type Handler struct {
 	csApiUrlOverrides   map[string]CsApiUrl
 	csApiUrlCache       *csApiUrlCache
 	store               store
+	// requireRoomMembership limits tokens to users of the listed full-access
+	// homeservers whose homeserver confirms they are joined to the room.
+	requireRoomMembership bool
 	// loopDone is closed when loop() has exited.
 	loopDone chan struct{}
 	// Channel that is closed once start-up recovery of previously stored
@@ -481,8 +485,20 @@ func (h *Handler) isFullAccessUser(matrixServerName string) bool {
 	return slices.Contains(h.fullAccessHomeservers, matrixServerName)
 }
 
-func (h *Handler) verifyOpenIDToken(ctx context.Context, token OpenIDTokenType, claimedUserID string) (string, error) {
-	userInfo, err := exchangeOpenIdUserInfo(ctx, token, h.skipVerifyTLS)
+func (h *Handler) verifyOpenIDToken(ctx context.Context, token OpenIDTokenType, claimedUserID string, roomID string) (string, error) {
+	var userInfo *fclient.UserInfo
+	var err error
+	switch {
+	case !h.requireRoomMembership:
+		userInfo, err = exchangeOpenIdUserInfo(ctx, token, h.skipVerifyTLS)
+	case slices.Contains(h.fullAccessHomeservers, token.MatrixServerName):
+		// Only homeservers listed by name are trusted to confirm membership; `*` does not count.
+		userInfo, err = exchangeOpenIdUserInfoInRoom(ctx, token, roomID, h.skipVerifyTLS)
+	default:
+		slog.Warn("Handler: refusing a user of a homeserver that is not listed as full access",
+			"MatrixServerName", token.MatrixServerName)
+		err = errors.New("homeserver is not listed as full access")
+	}
 	if err != nil {
 		return "", &MatrixErrorResponse{
 			Status:  http.StatusUnauthorized,
@@ -507,7 +523,7 @@ func (h *Handler) verifyOpenIDToken(ctx context.Context, token OpenIDTokenType, 
 // Deprecated: processLegacySFURequest serves the pre-Matrix-2.0 /sfu/get
 // endpoint. Remove once all in-the-wild clients have migrated to /get_token.
 func (h *Handler) processLegacySFURequest(r *http.Request, req *LegacySFURequest) (*SFUResponse, error) {
-	matrixID, err := h.verifyOpenIDToken(r.Context(), req.OpenIDToken, "")
+	matrixID, err := h.verifyOpenIDToken(r.Context(), req.OpenIDToken, "", req.Room)
 	if err != nil {
 		return nil, err
 	}
@@ -594,7 +610,7 @@ func (h *Handler) processLegacySFURequest(r *http.Request, req *LegacySFURequest
 }
 
 func (h *Handler) processSFURequest(r *http.Request, req *SFURequest) (*SFUResponse, error) {
-	matrixID, err := h.verifyOpenIDToken(r.Context(), req.OpenIDToken, req.Member.ClaimedUserID)
+	matrixID, err := h.verifyOpenIDToken(r.Context(), req.OpenIDToken, req.Member.ClaimedUserID, req.RoomID)
 	if err != nil {
 		return nil, err
 	}
@@ -693,7 +709,7 @@ func (h *Handler) processSFURequest(r *http.Request, req *SFURequest) (*SFURespo
 // goroutine (startParticipantLookup) will use its
 // backoff to confirm presence.
 func (h *Handler) processDelegateDelayedLeave(r *http.Request, req *DelegateDelayedLeaveRequest) (*DelegateDelayedLeaveResponse, error) {
-	matrixID, err := h.verifyOpenIDToken(r.Context(), req.OpenIDToken, req.Member.ClaimedUserID)
+	matrixID, err := h.verifyOpenIDToken(r.Context(), req.OpenIDToken, req.Member.ClaimedUserID, req.RoomID)
 	if err != nil {
 		return nil, err
 	}

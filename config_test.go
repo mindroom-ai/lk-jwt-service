@@ -236,6 +236,7 @@ func TestParseConfig(t *testing.T) {
 				"LIVEKIT_SANITY_CHECK_INTERVAL_SECONDS": "30",
 				"LIVEKIT_CS_API_URL_OVERRIDES":          "matrix.com=https://matrix-client.matrix.com",
 				"LIVEKIT_REDIS_URL":                     "localhost:6379",
+				"LIVEKIT_REQUIRE_ROOM_MEMBERSHIP":       "true",
 			},
 			wantConfig: &Config{
 				Key:                   "test_key",
@@ -247,6 +248,7 @@ func TestParseConfig(t *testing.T) {
 				SanityCheckInterval:   30 * time.Second,
 				CsApiUrlOverrides:     map[string]CsApiUrl{"matrix.com": "https://matrix-client.matrix.com"},
 				RedisURL:              "localhost:6379",
+				RequireRoomMembership: true,
 			},
 		},
 		{
